@@ -7,23 +7,12 @@ export default function AgentTTSPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(75); // ~1m 15s default until metadata loads
   const [isMuted, setIsMuted] = useState(false);
-  const [userName, setUserName] = useState('asif');
-  const [audioLoaded, setAudioLoaded] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize and load user data
+  // Initialize audio element
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.authenticated && data.user?.email) {
-          const namePart = data.user.email.split('@')[0];
-          setUserName(namePart);
-        }
-      })
-      .catch(() => {});
-
     // Create real HTML5 Audio element
     const audio = new Audio('/api/tts-briefing/urdu-audio');
     audio.preload = 'auto';
@@ -32,7 +21,6 @@ export default function AgentTTSPage() {
       if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
         setDuration(Math.floor(audio.duration));
       }
-      setAudioLoaded(true);
     };
 
     audio.ontimeupdate = () => {
@@ -99,6 +87,17 @@ export default function AgentTTSPage() {
     audio.muted = nextMuted;
   };
 
+  // Cycle Playback Speed
+  const cyclePlaybackRate = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const speeds = [1, 1.25, 1.5];
+    const nextIndex = (speeds.indexOf(playbackRate) + 1) % speeds.length;
+    const nextSpeed = speeds[nextIndex];
+    setPlaybackRate(nextSpeed);
+    audio.playbackRate = nextSpeed;
+  };
+
   // Format mm:ss
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -107,139 +106,348 @@ export default function AgentTTSPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4 space-y-6">
-      {/* 1. Header Bar matching screenshot */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Daily Business Briefing
-          </h1>
-        </div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-[#046a4e] border border-emerald-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#046a4e]" />
-          Live Briefing
-        </span>
+    <div className="min-h-[calc(100vh-5.5rem)] flex flex-col justify-center items-center py-6 px-4 relative overflow-hidden">
+      {/* Dynamic Keyframe Animations */}
+      <style jsx>{`
+        @keyframes rippleWave {
+          0% {
+            transform: scale(0.9);
+            opacity: 0.8;
+          }
+          50% {
+            transform: scale(1.35);
+            opacity: 0.35;
+          }
+          100% {
+            transform: scale(1.75);
+            opacity: 0;
+          }
+        }
+        @keyframes avatarFloat {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-8px);
+          }
+        }
+        @keyframes mouthTalkLoop {
+          0%, 100% {
+            height: 4px;
+            width: 24px;
+            border-radius: 9999px;
+          }
+          20% {
+            height: 18px;
+            width: 28px;
+            border-radius: 14px;
+          }
+          40% {
+            height: 8px;
+            width: 32px;
+            border-radius: 9999px;
+          }
+          60% {
+            height: 24px;
+            width: 26px;
+            border-radius: 16px;
+          }
+          80% {
+            height: 12px;
+            width: 30px;
+            border-radius: 12px;
+          }
+        }
+        @keyframes eyeGlow {
+          0%, 100% {
+            opacity: 0.9;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.15);
+          }
+        }
+        @keyframes barPulse1 {
+          0%, 100% { height: 12px; }
+          50% { height: 48px; }
+        }
+        @keyframes barPulse2 {
+          0%, 100% { height: 20px; }
+          50% { height: 64px; }
+        }
+        @keyframes barPulse3 {
+          0%, 100% { height: 8px; }
+          50% { height: 36px; }
+        }
+        @keyframes barPulse4 {
+          0%, 100% { height: 24px; }
+          50% { height: 56px; }
+        }
+        .anim-float {
+          animation: avatarFloat 4s ease-in-out infinite;
+        }
+        .anim-mouth {
+          animation: mouthTalkLoop 0.45s ease-in-out infinite;
+        }
+        .anim-eye {
+          animation: eyeGlow 2s ease-in-out infinite;
+        }
+      `}</style>
+
+      {/* Ambient Radial Background Glow when Talking */}
+      <div
+        className={`absolute inset-0 pointer-events-none transition-all duration-1000 flex items-center justify-center ${isPlaying ? 'opacity-100' : 'opacity-25'
+          }`}
+      >
+        <div className="w-[600px] h-[600px] sm:w-[800px] sm:h-[800px] rounded-full bg-gradient-to-tr from-emerald-500/15 via-teal-400/20 to-cyan-500/15 blur-3xl transform -translate-y-12" />
       </div>
 
-      {/* 2. Main Hero Audio Card (Only this part in full entire page) */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 p-8 sm:p-10 shadow-xs relative overflow-hidden transition-all">
-        <div className="flex flex-col md:flex-row items-center gap-8">
-          {/* Left: Glowing Animated Agent Avatar with Waveforms */}
-          <div className="relative flex items-center justify-center shrink-0">
-            {/* Left Soundwave Bars */}
-            <div className="flex items-center gap-1 mr-3 h-12">
-              <span className={`w-1 rounded-full bg-emerald-400 transition-all ${isPlaying ? 'h-6 animate-pulse' : 'h-2'}`} />
-              <span className={`w-1 rounded-full bg-teal-400 transition-all ${isPlaying ? 'h-10 animate-pulse' : 'h-4'}`} />
-              <span className={`w-1 rounded-full bg-cyan-400 transition-all ${isPlaying ? 'h-8 animate-pulse' : 'h-3'}`} />
-              <span className={`w-1 rounded-full bg-emerald-400 transition-all ${isPlaying ? 'h-4 animate-pulse' : 'h-2'}`} />
-            </div>
+      {/* Main Full-Page Experience Card */}
+      <div className="w-full max-w-3xl bg-white/95 backdrop-blur-md rounded-3xl border border-slate-200/90 p-8 sm:p-12 shadow-sm relative z-10 flex flex-col items-center text-center space-y-8">
 
-            {/* Glowing Center Avatar Circle */}
-            <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full flex items-center justify-center bg-gradient-to-tr from-cyan-400 via-emerald-400 to-teal-300 p-1 shadow-lg shadow-emerald-500/15">
-              <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center relative overflow-hidden border-2 border-white/60">
-                {/* Glowing ring pulse */}
-                <div className={`absolute inset-0 bg-emerald-500/20 rounded-full ${isPlaying ? 'animate-ping' : ''}`} />
 
-                {/* Friendly AI Face */}
-                <div className="relative z-10 flex flex-col items-center">
-                  <div className="flex items-center gap-4 mb-1">
-                    <span className="w-2 h-2 rounded-full bg-cyan-300" />
-                    <span className="w-2 h-2 rounded-full bg-cyan-300" />
-                  </div>
-                  <div className="w-4 h-2 rounded-b-full border-b-2 border-cyan-300" />
+
+        {/* Hero Talking Agent Avatar with Surrounding Visualizer Bars */}
+        <div className="relative flex items-center justify-center w-full py-4">
+
+          {/* Left Equalizer Waveform Bars (Large) */}
+          <div className="hidden sm:flex items-center gap-1.5 mr-6 h-24">
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-emerald-500 to-teal-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse1 0.6s ease-in-out infinite 0.1s' : 'none',
+                height: isPlaying ? undefined : '14px',
+              }}
+            />
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-teal-500 to-cyan-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse2 0.7s ease-in-out infinite 0.3s' : 'none',
+                height: isPlaying ? undefined : '20px',
+              }}
+            />
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-cyan-500 to-blue-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse3 0.5s ease-in-out infinite 0.2s' : 'none',
+                height: isPlaying ? undefined : '10px',
+              }}
+            />
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-emerald-500 to-cyan-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse4 0.65s ease-in-out infinite 0.4s' : 'none',
+                height: isPlaying ? undefined : '16px',
+              }}
+            />
+          </div>
+
+          {/* Central Animated Avatar Container with Concentric Ripple Waves */}
+          <div className="relative flex items-center justify-center">
+
+            {/* Concentric Audio Ripple Wave 1 */}
+            {isPlaying && (
+              <div
+                className="absolute w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-emerald-400/40 pointer-events-none"
+                style={{ animation: 'rippleWave 2.2s cubic-bezier(0, 0.2, 0.8, 1) infinite' }}
+              />
+            )}
+
+            {/* Concentric Audio Ripple Wave 2 */}
+            {isPlaying && (
+              <div
+                className="absolute w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-cyan-400/30 pointer-events-none"
+                style={{ animation: 'rippleWave 2.2s cubic-bezier(0, 0.2, 0.8, 1) infinite 0.7s' }}
+              />
+            )}
+
+            {/* Concentric Audio Ripple Wave 3 */}
+            {isPlaying && (
+              <div
+                className="absolute w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-teal-400/20 pointer-events-none"
+                style={{ animation: 'rippleWave 2.2s cubic-bezier(0, 0.2, 0.8, 1) infinite 1.4s' }}
+              />
+            )}
+
+            {/* Main Avatar Body (Much Bigger: 220px to 256px) */}
+            <div
+              className={`relative w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full p-1.5 transition-all duration-500 ${isPlaying
+                ? 'anim-float bg-gradient-to-tr from-cyan-400 via-emerald-400 to-teal-300 shadow-2xl shadow-emerald-500/30 scale-105'
+                : 'bg-gradient-to-tr from-slate-200 via-slate-300 to-slate-200 shadow-lg'
+                }`}
+            >
+              {/* Dark High-Tech Face Screen */}
+              <div className="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden border-4 border-white/80 shadow-inner">
+
+                {/* Ambient Screen Grid Texture */}
+                <div className="absolute inset-0 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px] opacity-10" />
+
+                {/* Overhead Headphone Arc */}
+                <div
+                  className={`absolute top-4 sm:top-5 w-28 sm:w-36 h-12 border-t-4 rounded-t-full transition-all duration-300 ${isPlaying ? 'border-cyan-400 opacity-90' : 'border-slate-600 opacity-40'
+                    }`}
+                />
+
+                {/* Left & Right Glowing Headphone Ear Cups */}
+                <div
+                  className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3 sm:w-4 h-10 sm:h-12 rounded-full transition-all duration-300 ${isPlaying ? 'bg-cyan-400 shadow-md shadow-cyan-400/50' : 'bg-slate-700'
+                    }`}
+                />
+                <div
+                  className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-3 sm:w-4 h-10 sm:h-12 rounded-full transition-all duration-300 ${isPlaying ? 'bg-cyan-400 shadow-md shadow-cyan-400/50' : 'bg-slate-700'
+                    }`}
+                />
+
+                {/* Glowing AI Eyes */}
+                <div className="relative z-10 flex items-center gap-7 sm:gap-9 mb-4">
+                  {/* Left Eye */}
+                  <div
+                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full transition-all duration-300 ${isPlaying
+                      ? 'anim-eye bg-cyan-300 shadow-[0_0_12px_#22d3ee]'
+                      : 'bg-slate-400'
+                      }`}
+                  />
+                  {/* Right Eye */}
+                  <div
+                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full transition-all duration-300 ${isPlaying
+                      ? 'anim-eye bg-cyan-300 shadow-[0_0_12px_#22d3ee]'
+                      : 'bg-slate-400'
+                      }`}
+                  />
                 </div>
 
-                {/* Headphone Arc */}
-                <div className="absolute top-2.5 w-16 h-8 border-t-2 border-cyan-300 rounded-t-full opacity-60" />
-              </div>
-            </div>
+                {/* Dynamic Talking Mouth Animation */}
+                <div className="relative z-10 flex items-center justify-center h-8">
+                  {isPlaying ? (
+                    <div className="anim-mouth bg-gradient-to-r from-cyan-300 via-emerald-300 to-cyan-300 shadow-[0_0_10px_#34d399]" />
+                  ) : (
+                    <div className="w-6 h-2 rounded-b-full border-b-2 border-slate-400" />
+                  )}
+                </div>
 
-            {/* Right Soundwave Bars */}
-            <div className="flex items-center gap-1 ml-3 h-12">
-              <span className={`w-1 rounded-full bg-emerald-400 transition-all ${isPlaying ? 'h-4 animate-pulse' : 'h-2'}`} />
-              <span className={`w-1 rounded-full bg-cyan-400 transition-all ${isPlaying ? 'h-8 animate-pulse' : 'h-3'}`} />
-              <span className={`w-1 rounded-full bg-teal-400 transition-all ${isPlaying ? 'h-10 animate-pulse' : 'h-4'}`} />
-              <span className={`w-1 rounded-full bg-emerald-400 transition-all ${isPlaying ? 'h-6 animate-pulse' : 'h-2'}`} />
+                {/* Sub-avatar Frequency Wavelet */}
+                <div className="absolute bottom-5 sm:bottom-6 flex items-center gap-1 opacity-70">
+                  <span className={`w-1 rounded-full bg-cyan-400 ${isPlaying ? 'h-3 animate-pulse' : 'h-1'}`} />
+                  <span className={`w-1 rounded-full bg-emerald-400 ${isPlaying ? 'h-5 animate-pulse' : 'h-1.5'}`} />
+                  <span className={`w-1 rounded-full bg-teal-400 ${isPlaying ? 'h-3 animate-pulse' : 'h-1'}`} />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right: Greeting Narrative & Audio Controller */}
-          <div className="flex-1 space-y-3.5 text-center md:text-left w-full">
-            <div>
-              <span className="text-[11px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-                AI AGENT
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                Good morning, {userName}!
-              </h2>
+          {/* Right Equalizer Waveform Bars (Large) */}
+          <div className="hidden sm:flex items-center gap-1.5 ml-6 h-24">
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-emerald-500 to-cyan-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse4 0.65s ease-in-out infinite 0.4s' : 'none',
+                height: isPlaying ? undefined : '16px',
+              }}
+            />
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-cyan-500 to-blue-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse3 0.5s ease-in-out infinite 0.2s' : 'none',
+                height: isPlaying ? undefined : '10px',
+              }}
+            />
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-teal-500 to-cyan-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse2 0.7s ease-in-out infinite 0.3s' : 'none',
+                height: isPlaying ? undefined : '20px',
+              }}
+            />
+            <span
+              className="w-1.5 rounded-full bg-gradient-to-t from-emerald-500 to-teal-400 transition-all duration-150"
+              style={{
+                animation: isPlaying ? 'barPulse1 0.6s ease-in-out infinite 0.1s' : 'none',
+                height: isPlaying ? undefined : '14px',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Full Interactive Audio Controller Deck */}
+        <div className="w-full max-w-xl bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
+
+          {/* Scrubber Slider & Timestamp */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-mono text-slate-500 font-medium">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
             </div>
+            <input
+              type="range"
+              min={0}
+              max={duration || 75}
+              value={currentTime}
+              onChange={(e) => handleSeek(Number(e.target.value))}
+              className="w-full accent-[#046a4e] h-2 bg-slate-200 rounded-lg cursor-pointer"
+            />
+          </div>
 
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-xl">
-              I&apos;m analyzing your store&apos;s performance and will guide you through today&apos;s key insights. Let&apos;s start with your sales performance.
-            </p>
+          {/* Action Buttons Row */}
+          <div className="flex items-center justify-between gap-3 pt-1">
 
-            {/* Audio Controller Bar */}
-            <div className="pt-2 flex items-center gap-3.5 w-full">
-              {/* Play / Pause Circular Button */}
-              <button
-                onClick={togglePlayPause}
-                className="w-12 h-12 rounded-full bg-[#046a4e] hover:bg-[#03543e] text-white flex items-center justify-center shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
-                title={isPlaying ? 'Pause' : 'Play Urdu Audio Briefing'}
-              >
-                {isPlaying ? (
-                  <span className="text-sm font-bold">❚❚</span>
-                ) : (
-                  <span className="text-lg font-bold ml-0.5">▶</span>
-                )}
-              </button>
+            {/* Speed Toggle */}
+            <button
+              onClick={cyclePlaybackRate}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 transition-colors cursor-pointer"
+              title="Change Playback Speed"
+            >
+              {playbackRate}x
+            </button>
 
-              {/* Progress Scrubber Bar */}
-              <div className="flex-1 relative flex items-center">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 75}
-                  value={currentTime}
-                  onChange={(e) => handleSeek(Number(e.target.value))}
-                  className="w-full accent-[#046a4e] h-2 bg-slate-100 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Time Indicator */}
-              <span className="text-xs font-mono text-slate-500 font-semibold shrink-0">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-
+            {/* Center Controls: Rewind, Play/Pause, Forward */}
+            <div className="flex items-center gap-3">
               {/* 15s Rewind */}
               <button
                 onClick={() => handleSkip(-15)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="p-2.5 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/70 transition-colors cursor-pointer"
                 title="Rewind 15 seconds"
               >
-                <span className="text-xs font-bold">↺ 15</span>
+                <span className="text-xs font-bold">↺ 15s</span>
+              </button>
+
+              {/* Main Play / Pause Hero Button */}
+              <button
+                onClick={togglePlayPause}
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-md transition-all transform hover:scale-105 active:scale-95 cursor-pointer ${isPlaying
+                  ? 'bg-[#046a4e] hover:bg-[#03543e] ring-4 ring-emerald-500/20'
+                  : 'bg-[#046a4e] hover:bg-[#03543e]'
+                  }`}
+                title={isPlaying ? 'Pause' : 'Play Urdu Audio Briefing'}
+              >
+                {isPlaying ? (
+                  <span className="text-base font-bold">❚❚</span>
+                ) : (
+                  <span className="text-xl font-bold ml-1">▶</span>
+                )}
               </button>
 
               {/* 15s Forward */}
               <button
                 onClick={() => handleSkip(15)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="p-2.5 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/70 transition-colors cursor-pointer"
                 title="Forward 15 seconds"
               >
-                <span className="text-xs font-bold">↻ 15</span>
-              </button>
-
-              {/* Mute / Unmute Volume Toggle */}
-              <button
-                onClick={toggleMute}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
-                <span className="text-base">{isMuted ? '🔇' : '🔊'}</span>
+                <span className="text-xs font-bold">↻ 15s</span>
               </button>
             </div>
+
+            {/* Mute / Unmute Toggle */}
+            <button
+              onClick={toggleMute}
+              className="p-2.5 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-200/70 transition-colors cursor-pointer"
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              <span className="text-base">{isMuted ? '🔇' : '🔊'}</span>
+            </button>
           </div>
         </div>
+
       </div>
     </div>
   );

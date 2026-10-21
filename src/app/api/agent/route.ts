@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         priority: 'critical',
         title: `Mitigate sizing and description variance on ${topReturnedItem[0]}`,
         category: 'refund_mitigation',
-        impactEstimate: `Save ~$${Math.round(topReturnedItem[1] * 150)}/mo in return processing & inventory holding`,
+        impactEstimate: `Save ~Rs. ${Math.round(topReturnedItem[1] * 150)}/mo in return processing & inventory holding`,
         rationale: 'Customer return reason clustering reveals size fit inconsistency (runs 1 size larger).',
         evidenceIds: ['ev_1', 'ev_2'],
         suggestedSteps: [

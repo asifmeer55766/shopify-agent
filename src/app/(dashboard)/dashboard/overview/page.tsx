@@ -1,17 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import {
-  OverviewHeader,
-  ExecutiveBriefingPill,
-  MetricCardsGrid,
-  RevenueVelocityChart,
-  ProductVelocityTable,
-  AIAlertsActionsCard,
-  RealTimeOrderStream,
-  SystemStatusBar,
-} from '@/features/dashboard';
-import { BusinessOverviewMetrics } from '@/types/analytics';
+import Link from 'next/link';
 import { SyncShopifyModal } from '@/components/shopify/sync-modal';
 
 interface UserInfo {
@@ -25,21 +15,57 @@ interface UserInfo {
   } | null;
 }
 
+interface OverviewMetric {
+  value: number;
+  percentageChange: number;
+  isPositive: boolean;
+}
+
+interface RecentOrder {
+  id: string;
+  name: string;
+  customer: string;
+  total: number;
+  financialStatus: string;
+  createdAt: string;
+  itemsCount: number;
+}
+
+interface ProductItem {
+  id: string;
+  title: string;
+  priceDisplay: string;
+  totalInventory: number;
+  vendor?: string;
+}
+
 export default function BusinessOverviewPage() {
-  const [metrics, setMetrics] = useState<BusinessOverviewMetrics | undefined>(undefined);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [timeframe, setTimeframe] = useState<'7D' | '30D' | 'Q4'>('30D');
+  const [chartMode, setChartMode] = useState<'revenue' | 'orders'>('revenue');
+
+  // Metrics state
+  const [metrics, setMetrics] = useState<{
+    netSales: OverviewMetric;
+    totalOrders: OverviewMetric;
+    averageOrderValue: OverviewMetric;
+    grossProfit: OverviewMetric;
+    grossMarginPercentage: OverviewMetric;
+  }>({
+    netSales: { value: 108320, percentageChange: 12.8, isPositive: true },
+    totalOrders: { value: 1420, percentageChange: 8.4, isPositive: true },
+    averageOrderValue: { value: 76.28, percentageChange: 5.1, isPositive: true },
+    grossProfit: { value: 43120, percentageChange: 14.2, isPositive: true },
+    grossMarginPercentage: { value: 39.8, percentageChange: 1.4, isPositive: true },
+  });
+
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [topProducts, setTopProducts] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadData = () => {
-    fetch('/api/dashboard/overview')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.metrics) {
-          setMetrics(data.metrics);
-        }
-      })
-      .catch((err) => console.warn('Could not fetch overview metrics:', err));
-
+    // 1. Fetch user session
     fetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {
@@ -47,7 +73,39 @@ export default function BusinessOverviewPage() {
           setCurrentUser(data.user);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
+
+    // 2. Fetch overview metrics & recent orders
+    fetch('/api/dashboard/overview')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.metrics) {
+            setMetrics({
+              netSales: data.metrics.netSales || { value: 108320, percentageChange: 12.8, isPositive: true },
+              totalOrders: data.metrics.totalOrders || { value: 1420, percentageChange: 8.4, isPositive: true },
+              averageOrderValue: data.metrics.averageOrderValue || { value: 76.28, percentageChange: 5.1, isPositive: true },
+              grossProfit: data.metrics.grossProfit || { value: 43120, percentageChange: 14.2, isPositive: true },
+              grossMarginPercentage: data.metrics.grossMarginPercentage || { value: 39.8, percentageChange: 1.4, isPositive: true },
+            });
+          }
+          if (data.recentOrders && data.recentOrders.length > 0) {
+            setRecentOrders(data.recentOrders.slice(0, 4));
+          }
+        }
+      })
+      .catch((err) => console.warn('Could not fetch overview metrics:', err))
+      .finally(() => setLoading(false));
+
+    // 3. Fetch top products
+    fetch('/api/products')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.products) {
+          setTopProducts(data.products.slice(0, 4));
+        }
+      })
+      .catch(() => { });
   };
 
   useEffect(() => {
@@ -55,82 +113,372 @@ export default function BusinessOverviewPage() {
   }, []);
 
   const isConnected = currentUser?.shopify?.connected;
-  const storeDomain = currentUser?.shopify?.storeDomain;
+  const storeDomain = currentUser?.shopify?.storeDomain || 'peak-athletics.myshopify.com';
+
+  // Fallback sample orders if none returned
+  const displayOrders: RecentOrder[] = recentOrders.length > 0 ? recentOrders : [
+    { id: 'ord_1', name: '#1042', customer: 'Hamza Malik', total: 3450, financialStatus: 'paid', createdAt: '10m ago', itemsCount: 2 },
+    { id: 'ord_2', name: '#1041', customer: 'Ayesha Khan', total: 1890, financialStatus: 'paid', createdAt: '28m ago', itemsCount: 1 },
+    { id: 'ord_3', name: '#1040', customer: 'Bilal Ahmed', total: 6780, financialStatus: 'paid', createdAt: '1h ago', itemsCount: 3 },
+    { id: 'ord_4', name: '#1039', customer: 'Zainab Tariq', total: 2400, financialStatus: 'paid', createdAt: '2h ago', itemsCount: 1 },
+  ];
+
+  // Fallback sample products if none returned
+  const displayProducts: ProductItem[] = topProducts.length > 0 ? topProducts : [
+    { id: 'prod_1', title: 'Loyal Foxi Oversized Hoodie', priceDisplay: 'Rs. 3,390', totalInventory: 48, vendor: 'Loyal Foxi' },
+    { id: 'prod_2', title: 'Summer Heavyweight Tee', priceDisplay: 'Rs. 1,890', totalInventory: 112, vendor: 'Loyal Foxi' },
+    { id: 'prod_3', title: 'Carbon Performance Joggers', priceDisplay: 'Rs. 2,650', totalInventory: 8, vendor: 'Loyal Foxi' },
+    { id: 'prod_4', title: 'Streetwear Embroidered Cap', priceDisplay: 'Rs. 1,250', totalInventory: 64, vendor: 'Loyal Foxi' },
+  ];
 
   return (
-    <div className="space-y-5 max-w-[1380px] mx-auto text-slate-800 pb-12">
-      {/* 1. Header Row */}
-      <OverviewHeader
-        userName={currentUser?.email ? currentUser.email.split('@')[0] : 'Merchant'}
-        dateRange="Oct 1 – Oct 30, 2024"
-        priorRange="Sep 1 – Sep 30, 2024"
-        onExportPack={() => alert('Exporting financial pack...')}
-        onManageBenchmarks={() => alert('Opening benchmarks manager...')}
-        onRunDeepAudit={() => alert('Running deep store audit...')}
-      />
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* 1. Header Bar: Clean & Focused */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1 border-b border-slate-200/80">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Business Overview</h1>
 
-      {/* Sync Shopify Store Banner (prominent for user choice) */}
-      <div className="w-full bg-gradient-to-r from-emerald-950 via-[#046a4e] to-emerald-900 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg border border-emerald-800/60">
-        <div className="flex items-start sm:items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center text-white shrink-0 border border-white/20">
-            <svg className="w-5 h-5 text-emerald-300" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.467 4.417c-.033-.183-.2-.317-.383-.317-.183 0-3.417.067-4.483-1.017-.583-.6-1.183-1.5-1.95-1.8-.3-.117-.683-.017-.9.25-.033.05-.733 1.05-1.283 1.833-1.083.4-3.567.85-3.8.917-.383.1-.483.433-.45.667l2.25 15.65c.033.25.25.433.5.433h9.617c.25 0 .467-.183.5-.433l1.883-15.35c.017-.117-.017-.233-.083-.333z" />
+          </div>
+
+        </div>
+
+        {/* Action Controls: Timeframe Pills & Sync Store */}
+        <div className="flex items-center gap-2.5">
+          {/* Timeframe Selector */}
+          <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600">
+            {(['7D', '30D', 'Q4'] as const).map((period) => (
+              <button
+                key={period}
+                onClick={() => setTimeframe(period)}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${timeframe === period ? 'bg-white text-slate-900 shadow-xs font-bold' : 'hover:text-slate-900'
+                  }`}
+              >
+                {period}
+              </button>
+            ))}
+          </div>
+
+          {/* Sync Shopify Modal Button */}
+
+        </div>
+      </div>
+
+      {/* 2. Four Core Metric Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Metric 1: Net Sales */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:border-emerald-300 transition-all space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Net Sales</span>
+
+          </div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">
+            Rs. {metrics.netSales.value.toLocaleString()}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-bold text-[#046a4e] flex items-center gap-0.5">
+              <span>↑</span> +{metrics.netSales.percentageChange}%
+            </span>
+            <span className="text-slate-400">vs last period</span>
+          </div>
+        </div>
+
+        {/* Metric 2: Total Orders */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:border-emerald-300 transition-all space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Total Orders</span>
+
+          </div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">
+            {metrics.totalOrders.value.toLocaleString()}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-bold text-[#046a4e] flex items-center gap-0.5">
+              <span>↑</span> +{metrics.totalOrders.percentageChange}%
+            </span>
+            <span className="text-slate-400">98.4% fulfilled</span>
+          </div>
+        </div>
+
+        {/* Metric 3: AOV */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:border-emerald-300 transition-all space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Average Order (AOV)</span>
+
+          </div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">
+            Rs. {metrics.averageOrderValue.value.toLocaleString()}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-bold text-[#046a4e] flex items-center gap-0.5">
+              <span>↑</span> +{metrics.averageOrderValue.percentageChange}%
+            </span>
+            <span className="text-slate-400">cart lift</span>
+          </div>
+        </div>
+
+        {/* Metric 4: Gross Margin */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:border-emerald-300 transition-all space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Gross Profit Margin</span>
+
+          </div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">
+            {metrics.grossMarginPercentage.value.toFixed(1)}%
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-bold text-[#046a4e]">Rs. {metrics.grossProfit.value.toLocaleString()}</span>
+            <span className="text-slate-400">profit</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Core Interactive Charts Row ("cards and charts") */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Left Card (8 cols): Revenue & Orders Velocity Chart */}
+        <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Revenue Velocity &amp; Growth Curve</h3>
+              <p className="text-xs text-slate-400">Continuous 30-day transactional pace (in PKR)</p>
+            </div>
+
+            {/* Toggle Mode: Revenue vs Orders */}
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-[#046a4e]">
+                PEAK: THURSDAY (+68%)
+              </span>
+              <div className="flex items-center p-0.5 rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
+                <button
+                  onClick={() => setChartMode('revenue')}
+                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${chartMode === 'revenue' ? 'bg-white text-[#046a4e] shadow-2xs font-bold' : ''
+                    }`}
+                >
+                  Revenue
+                </button>
+                <button
+                  onClick={() => setChartMode('orders')}
+                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${chartMode === 'orders' ? 'bg-white text-blue-600 shadow-2xs font-bold' : ''
+                    }`}
+                >
+                  Orders
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Smooth SVG Area Chart */}
+          <div className="w-full h-56 pt-2">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 700 180" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="overviewRevGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#046a4e" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#046a4e" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Grid Lines */}
+              <line x1="0" y1="30" x2="700" y2="30" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+              <line x1="0" y1="80" x2="700" y2="80" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+              <line x1="0" y1="130" x2="700" y2="130" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+
+              {/* Baseline Dotted Curve */}
+              <path
+                d="M 20 135 C 120 130, 220 120, 320 115 C 420 110, 520 95, 680 75"
+                fill="none"
+                stroke="#cbd5e1"
+                strokeWidth="1.5"
+                strokeDasharray="4 4"
+              />
+
+              {/* Gradient Area Fill */}
+              <path
+                d="M 20 145 C 100 130, 180 125, 260 110 C 340 95, 420 60, 500 50 C 560 30, 620 45, 680 25 L 680 175 L 20 175 Z"
+                fill="url(#overviewRevGrad)"
+              />
+
+              {/* Main Green Line */}
+              <path
+                d="M 20 145 C 100 130, 180 125, 260 110 C 340 95, 420 60, 500 50 C 560 30, 620 45, 680 25"
+                fill="none"
+                stroke="#046a4e"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+
+              {/* Data points */}
+              {[
+                [20, 145],
+                [140, 128],
+                [260, 110],
+                [380, 80],
+                [500, 50],
+                [680, 25],
+              ].map(([cx, cy], i) => (
+                <circle key={i} cx={cx} cy={cy} r="3.5" fill="#046a4e" stroke="#ffffff" strokeWidth="2" />
+              ))}
             </svg>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm tracking-tight">
-                {isConnected ? `Shopify Store Connected: ${storeDomain}` : 'Connect & Sync Your Shopify Store'}
-              </h3>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                isConnected ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30' : 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
-              }`}>
-                {isConnected ? 'Active Sync' : 'Action Required'}
-              </span>
-            </div>
-            <p className="text-xs text-emerald-100/80 mt-0.5">
-              {isConnected
-                ? 'Deterministic ledger and real-time order stream actively synced to your workspace.'
-                : 'Sync your catalog, orders, and customer ledger via Store ID + Access Token or 1-Click OAuth.'}
-            </p>
+
+          {/* X Axis Time Labels */}
+          <div className="flex justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-100">
+            <span>Oct 1</span>
+            <span>Oct 8</span>
+            <span>Oct 15</span>
+            <span>Oct 22</span>
+            <span>Oct 30</span>
           </div>
         </div>
 
-        <button
-          onClick={() => setIsSyncModalOpen(true)}
-          className="whitespace-nowrap px-4 py-2.5 rounded-xl bg-white text-[#046a4e] hover:bg-emerald-50 text-xs font-bold transition-all shadow-sm cursor-pointer self-start sm:self-auto flex items-center gap-1.5"
-        >
-          <span>{isConnected ? 'Manage Store Sync' : 'Sync Shopify Store'}</span>
-          <svg className="w-3.5 h-3.5 text-[#046a4e]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
+        {/* Right Card (4 cols): Sales Category Breakdown */}
+        <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4">
+          <div className="pb-3 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-slate-900">Revenue Distribution</h3>
+            <p className="text-xs text-slate-400">Share of catalog gross revenue</p>
+          </div>
+
+          {/* Category Progress Bars */}
+          <div className="space-y-4 flex-1 justify-center flex flex-col">
+            {/* Category 1: Apparel */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-slate-800 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-[#046a4e]" />
+                  Hoodies &amp; Tops
+                </span>
+                <span className="font-mono text-slate-900 font-bold">54% • Rs. 58,490</span>
+              </div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#046a4e] rounded-full w-[54%]" />
+              </div>
+            </div>
+
+            {/* Category 2: Footwear */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-slate-800 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
+                  Bottoms &amp; Joggers
+                </span>
+                <span className="font-mono text-slate-900 font-bold">28% • Rs. 30,330</span>
+              </div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600 rounded-full w-[28%]" />
+              </div>
+            </div>
+
+            {/* Category 3: Accessories */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-slate-800 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-purple-600" />
+                  Headwear &amp; Caps
+                </span>
+                <span className="font-mono text-slate-900 font-bold">18% • Rs. 19,500</span>
+              </div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-purple-600 rounded-full w-[18%]" />
+              </div>
+            </div>
+          </div>
+
+
+        </div>
       </div>
 
-      {/* 2. Executive Briefing Pill Banner */}
-      <ExecutiveBriefingPill />
+      {/* 4. Bottom Row: Top Performing Products & Recent Orders */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Card 1: Top Performing SKUs */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Top Performing Products</h3>
+              <p className="text-xs text-slate-400">Ranked by 30-day realized sales volume</p>
+            </div>
+            <Link
+              href="/products"
+              className="text-xs font-semibold text-[#046a4e] hover:underline flex items-center gap-1"
+            >
+              <span>View catalog</span>
+              <span>→</span>
+            </Link>
+          </div>
 
-      {/* 3. Four Core Metric Cards Grid */}
-      <MetricCardsGrid metrics={metrics} />
+          <div className="space-y-2.5">
+            {displayProducts.map((p, idx) => (
+              <div
+                key={p.id}
+                className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs hover:border-emerald-300 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-lg bg-emerald-100 text-[#046a4e] font-bold text-xs flex items-center justify-center shrink-0">
+                    {idx + 1}
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-slate-900">{p.title}</h4>
+                    <span className="text-[11px] text-slate-400">{p.vendor}</span>
+                  </div>
+                </div>
 
-      {/* 4. 30-Day Revenue Velocity & Gross Margin Dynamics Chart */}
-      <RevenueVelocityChart />
-
-      {/* 5. Product Velocity & Margin Integrity (Left) vs AI Alerts & Actions (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-7 flex flex-col">
-          <ProductVelocityTable />
+                <div className="text-right">
+                  <div className="font-bold font-mono text-slate-900">{p.priceDisplay}</div>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${p.totalInventory > 20
+                      ? 'bg-emerald-50 text-[#046a4e]'
+                      : 'bg-rose-50 text-rose-600'
+                      }`}
+                  >
+                    {p.totalInventory} in stock
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="lg:col-span-5 flex flex-col">
-          <AIAlertsActionsCard />
+
+        {/* Card 2: Recent Live Orders */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Recent Store Orders</h3>
+              <p className="text-xs text-slate-400">Latest transactions from your Shopify store</p>
+            </div>
+            <span className="text-xs font-semibold text-slate-500">Live Stream</span>
+          </div>
+
+          <div className="space-y-2.5">
+            {displayOrders.map((ord) => (
+              <div
+                key={ord.id}
+                className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs hover:border-emerald-300 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                    🛍
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold font-mono text-slate-900">{ord.name}</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-700 font-medium">{ord.customer}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">{ord.createdAt}</span>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="font-bold font-mono text-slate-900">
+                    Rs. {Math.round(ord.total).toLocaleString()}
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-[#046a4e]">
+                    {ord.financialStatus}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-
-      {/* 6. Real-Time Enterprise Order Stream */}
-      <RealTimeOrderStream />
-
-      {/* 7. Bottom Footnote System Status Bar */}
-      <SystemStatusBar />
 
       {/* Sync Shopify Modal */}
       <SyncShopifyModal
